@@ -1,0 +1,11 @@
+include: package:lints/recommended.yaml
+
+plugins:
+  squiggly:
+    path: ../
+    diagnostics:
+      equality_incomplete: true
+      copywith_incomplete: true
+      tostring_incomplete: true
+
+
