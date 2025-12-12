@@ -47,9 +47,7 @@ Add `squiggly` as a dev dependency in your `pubspec.yaml`:
 
 ```yaml
 dev_dependencies:
-  squiggly:
-    git:
-      url: https://github.com/KlausJokisuo/squiggly_lint
+  squiggly: ^1.0.0
 ```
 
 Then configure the plugin in your `analysis_options.yaml`:
