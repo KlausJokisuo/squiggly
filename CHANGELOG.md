@@ -1,3 +1,6 @@
+## 1.0.2
+- Fix Changelog
+
 ## 1.0.1
 - Fix Readme
 
