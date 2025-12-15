@@ -3,8 +3,14 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
 import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer_plugin/utilities/change_builder/change_builder_dart.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:squiggly/utils.dart';
 import 'package:test/test.dart';
+
+class MockDartFileEditBuilder extends Mock implements DartFileEditBuilder {}
+
+class FakeUri extends Fake implements Uri {}
 
 MethodDeclaration _firstMethod(ClassDeclaration clazz, String name) {
   return clazz.members.whereType<MethodDeclaration>().firstWhere(
@@ -16,6 +22,8 @@ MethodDeclaration _firstMethod(ClassDeclaration clazz, String name) {
 late final Directory _tempDir;
 late final AnalysisContextCollection _collection;
 int _fileCounter = 0;
+
+final mockBuilder = MockDartFileEditBuilder();
 
 /// Resolves code and returns the first class declaration with full semantic info.
 Future<ClassDeclaration> _resolveFirstClass(String code) async {
@@ -31,6 +39,7 @@ Future<ClassDeclaration> _resolveFirstClass(String code) async {
 
 void main() {
   setUpAll(() {
+    registerFallbackValue(FakeUri());
     _tempDir = Directory.systemTemp.createTempSync('squiggly_test_');
     _collection = AnalysisContextCollection(includedPaths: [_tempDir.path]);
   });
@@ -63,7 +72,11 @@ void main() {
     });
 
     test('buildEqualitySnippet no fields', () {
-      final snippet = buildEqualitySnippet('User', const []);
+      final snippet = buildEqualitySnippet(
+        'User',
+        const [],
+        builder: mockBuilder,
+      );
       expect(snippet, """
 
   @override
@@ -73,7 +86,27 @@ void main() {
     });
 
     test('buildEqualitySnippet with fields', () {
-      final snippet = buildEqualitySnippet('User', ['name', 'age']);
+      final fields = [
+        (
+          name: 'name',
+          type: 'String',
+          isNamed: false,
+          isNullable: false,
+          isCollection: false,
+        ),
+        (
+          name: 'age',
+          type: 'int',
+          isNamed: false,
+          isNullable: false,
+          isCollection: false,
+        ),
+      ];
+      final snippet = buildEqualitySnippet(
+        'User',
+        fields,
+        builder: mockBuilder,
+      );
       expect(snippet, """
 
   @override
@@ -83,15 +116,44 @@ void main() {
     });
 
     test('buildHashCodeSnippet fields', () {
-      final snippet = buildHashCodeSnippet(['name', 'age']);
+      final fields = [
+        (
+          name: 'name',
+          type: 'String',
+          isNamed: false,
+          isNullable: false,
+          isCollection: false,
+        ),
+        (
+          name: 'age',
+          type: 'int',
+          isNamed: false,
+          isNullable: false,
+          isCollection: false,
+        ),
+      ];
+      final snippet = buildHashCodeSnippet(fields);
       expect(snippet, """
 
   @override
-  int get hashCode => Object.hashAll([name, age]);""");
+  int get hashCode => Object.hash(name, age);""");
     });
 
     test('buildEqualityAndHashCodeSnippet combines both', () {
-      final snippet = buildEqualityAndHashCodeSnippet('User', ['name']);
+      final fields = [
+        (
+          name: 'name',
+          type: 'String',
+          isNamed: false,
+          isNullable: false,
+          isCollection: false,
+        ),
+      ];
+      final snippet = buildEqualityAndHashCodeSnippet(
+        'User',
+        fields,
+        builder: mockBuilder,
+      );
       expect(snippet, """
 
   @override
@@ -101,7 +163,38 @@ void main() {
 
 
   @override
-  int get hashCode => Object.hashAll([name]);""");
+  int get hashCode => Object.hash(name);""");
+    });
+
+    test('buildEqualityAndHashCodeSnippet with collection fields', () {
+      when(() => mockBuilder.importLibrary(any())).thenReturn('meow');
+
+      final fields = [
+        (
+          name: 'tags',
+          type: 'List<String>',
+          isNamed: false,
+          isNullable: false,
+          isCollection: true,
+        ),
+      ];
+      final snippet = buildEqualityAndHashCodeSnippet(
+        'User',
+        fields,
+        builder: mockBuilder,
+      );
+      expect(
+        snippet,
+        '\n'
+        '  @override\n'
+        '  bool operator ==(Object other) =>\n'
+        '      identical(this, other) ||\n'
+        '      other is User && const DeepCollectionEquality().equals(tags, other.tags);\n'
+        '\n'
+        '\n'
+        '  @override\n'
+        '  int get hashCode => Object.hash(const DeepCollectionEquality().hash(tags));',
+      );
     });
   });
 
@@ -149,6 +242,21 @@ class User {
       expect(snippet, contains('copyWith'));
       expect(snippet, contains('name == null ? this.name : name.value'));
       expect(snippet, contains('age == null ? this.age : age.value'));
+    });
+
+    test('generates copyWith with generic types', () async {
+      const code = '''
+class User {
+  final List<Animal> pets;
+  User({required this.pets});
+}
+class Animal {}
+''';
+
+      final clazz = await _resolveFirstClass(code);
+      final snippet = buildCopyWithSnippet(clazz)!;
+
+      expect(snippet, contains('({List<Animal> value})? pets'));
     });
   });
 

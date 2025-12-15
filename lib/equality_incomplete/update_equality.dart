@@ -45,15 +45,17 @@ class UpdateEquality extends ResolvedCorrectionProducer {
     }
 
     final className = getClassName(classDecl);
-    final classFieldNames = getClassFields(
-      classDecl,
-    ).map((field) => field.name);
+    final classFields = getClassFields(classDecl);
 
     await builder.addDartFileEdit(file, (builder) {
       final equalityRange = equalityMethod.offset;
       final equalityLength = equalityMethod.length;
 
-      final equalitySnippet = buildEqualitySnippet(className, classFieldNames);
+      final equalitySnippet = buildEqualitySnippet(
+        className,
+        classFields,
+        builder: builder,
+      );
 
       builder.addSimpleReplacement(
         SourceRange(equalityRange, equalityLength),
@@ -63,7 +65,10 @@ class UpdateEquality extends ResolvedCorrectionProducer {
       final hashCodeRange = hashCodeMethod.offset;
       final hashCodeLength = hashCodeMethod.length;
 
-      final hashCodeSnippet = buildHashCodeSnippet(classFieldNames);
+      final hashCodeSnippet = buildHashCodeSnippet(
+        classFields,
+        builder: builder,
+      );
 
       builder.addSimpleReplacement(
         SourceRange(hashCodeRange, hashCodeLength),

@@ -1,26 +1,15 @@
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer_plugin/utilities/change_builder/change_builder_dart.dart';
 
 /// Code generation helpers (kept in one place to avoid duplication)
 
 /// Builds a toString() override snippet for the given class and fields.
-/// Set [forReplacement] to true when replacing an existing method (uses single leading newline).
-String buildToStringSnippet(
-  String className,
-  Iterable<String> fieldNames, {
-  bool forReplacement = false,
-}) {
+String buildToStringSnippet(String className, Iterable<String> fieldNames) {
   final fieldsText = fieldNames.isNotEmpty
       ? fieldNames.map((f) => '$f: \$$f').join(', ')
       : '';
-
-  if (forReplacement) {
-    return '\n@override\n'
-        '  String toString() {\n'
-        "    return '$className{$fieldsText}';\n"
-        '  }';
-  }
 
   return '''
 
@@ -32,43 +21,58 @@ String buildToStringSnippet(
 }
 
 /// Builds equality operator and hashCode getter snippet.
-/// Set [forReplacement] to true when replacing existing methods (uses single leading newline).
 String buildEqualityAndHashCodeSnippet(
   String className,
-  Iterable<String> fieldNames, {
-  bool forReplacement = false,
+  List<
+    ({
+      String name,
+      String type,
+      bool isNamed,
+      bool isNullable,
+      bool isCollection,
+    })
+  >
+  fields, {
+  required DartFileEditBuilder builder,
 }) {
   final equalitySnippet = buildEqualitySnippet(
     className,
-    fieldNames,
-    forReplacement: forReplacement,
+    fields,
+    builder: builder,
   );
-  final hashCodeSnippet = buildHashCodeSnippet(
-    fieldNames,
-    forReplacement: forReplacement,
-  );
+  final hashCodeSnippet = buildHashCodeSnippet(fields, builder: builder);
 
   return '$equalitySnippet\n\n$hashCodeSnippet';
 }
 
 /// Builds equality operator snippet.
-/// Set [forReplacement] to true when replacing an existing method (uses single leading newline).
 String buildEqualitySnippet(
   String className,
-  Iterable<String> fieldNames, {
-  bool forReplacement = false,
+  List<
+    ({
+      String name,
+      String type,
+      bool isNamed,
+      bool isNullable,
+      bool isCollection,
+    })
+  >
+  fields, {
+  required DartFileEditBuilder builder,
 }) {
-  if (forReplacement) {
-    final equalityFieldsText = fieldNames
-        .map((f) => ' &&\n      $f == other.$f')
-        .join();
-    return '\n@override\n'
-        '  bool operator ==(Object other) => identical(this, other) || \n'
-        '      other is $className$equalityFieldsText;';
+  if (fields.any((f) => f.isCollection)) {
+    builder.importLibrary(Uri.parse('package:collection/collection.dart'));
   }
 
-  final equalityFields = fieldNames.map((f) => '$f == other.$f').join(' && ');
-  final equalityCheck = fieldNames.isNotEmpty ? ' && $equalityFields' : '';
+  final equalityFields = fields
+      .map((f) {
+        if (f.isCollection) {
+          return 'const DeepCollectionEquality().equals(${f.name}, other.${f.name})';
+        }
+        return '${f.name} == other.${f.name}';
+      })
+      .join(' && ');
+  final equalityCheck = fields.isNotEmpty ? ' && $equalityFields' : '';
   return '''
 
   @override
@@ -78,22 +82,36 @@ String buildEqualitySnippet(
 }
 
 /// Builds hashCode getter snippet.
-/// Set [forReplacement] to true when replacing an existing method (uses single leading newline).
 String buildHashCodeSnippet(
-  Iterable<String> fieldNames, {
-  bool forReplacement = false,
+  List<
+    ({
+      String name,
+      String type,
+      bool isNamed,
+      bool isNullable,
+      bool isCollection,
+    })
+  >
+  fields, {
+  DartFileEditBuilder? builder,
 }) {
-  final hashList = fieldNames.join(', ');
-
-  if (forReplacement) {
-    return '\n@override\n'
-        '  int get hashCode => Object.hashAll([$hashList]);';
+  if (builder != null && fields.any((f) => f.isCollection)) {
+    builder.importLibrary(Uri.parse('package:collection/collection.dart'));
   }
+
+  final hashList = fields
+      .map((f) {
+        if (f.isCollection) {
+          return 'const DeepCollectionEquality().hash(${f.name})';
+        }
+        return f.name;
+      })
+      .join(', ');
 
   return '''
 
   @override
-  int get hashCode => Object.hashAll([$hashList]);''';
+  int get hashCode => Object.hash($hashList);''';
 }
 
 /// Builds a copyWith(...) snippet for the class based on the best constructor.
@@ -253,7 +271,9 @@ bool isConstructorSuitableForCopyWith(ConstructorDeclaration constructor) {
 /// Gets the fields of a class as a list of records containing
 /// name, type, isNamed, and isNullable.
 /// If constructorOnly is true, only fields present in the best constructor are returned.
-List<({String name, String type, bool isNamed, bool isNullable})>
+List<
+  ({String name, String type, bool isNamed, bool isNullable, bool isCollection})
+>
 getClassFields(ClassDeclaration node, {bool constructorOnly = false}) {
   final constructor = getBestConstructorForCopyWith(node);
 
@@ -284,12 +304,18 @@ getClassFields(ClassDeclaration node, {bool constructorOnly = false}) {
         (fieldDecl) => fieldDecl.fields.variables.map((v) {
           final name = v.declaredFragment?.name ?? v.name.lexeme;
           final declaredElement = v.declaredFragment?.element;
-          final type = declaredElement?.type.element?.name ?? 'dynamic';
+          final type =
+              declaredElement?.type.getDisplayString(withNullability: false) ??
+              'dynamic';
           final isNullable =
               declaredElement?.type.nullabilitySuffix.toString().contains(
                 'question',
               ) ??
               false;
+          final isCollection =
+              declaredElement?.type.isDartCoreList == true ||
+              declaredElement?.type.isDartCoreSet == true ||
+              declaredElement?.type.isDartCoreMap == true;
           final isNamed = parameterMap[name] ?? false;
 
           return (
@@ -297,6 +323,7 @@ getClassFields(ClassDeclaration node, {bool constructorOnly = false}) {
             type: type,
             isNamed: isNamed,
             isNullable: isNullable,
+            isCollection: isCollection,
           );
         }),
       )

@@ -43,15 +43,19 @@ class ImplementDataClassMethods extends ResolvedCorrectionProducer {
     if (!needEquality && !needCopyWith) return;
 
     final className = getClassName(classDecl);
-    final classFieldNames = getClassFields(classDecl).map((f) => f.name);
+    final classFields = getClassFields(classDecl);
 
-    await builder.addDartFileEdit(file, (builder) {
+    await builder.addDartFileEdit(file, (fileBuilder) {
       final insertOffset = classDecl.rightBracket.offset;
-      builder.addInsertion(insertOffset, (builder) {
+      fileBuilder.addInsertion(insertOffset, (builder) {
         // equality + hashCode
         if (needEquality) {
           builder.write(
-            buildEqualityAndHashCodeSnippet(className, classFieldNames),
+            buildEqualityAndHashCodeSnippet(
+              className,
+              classFields,
+              builder: fileBuilder,
+            ),
           );
         }
 
@@ -65,7 +69,7 @@ class ImplementDataClassMethods extends ResolvedCorrectionProducer {
         }
       });
 
-      builder.format(SourceRange(0, unitResult.content.length));
+      fileBuilder.format(SourceRange(0, unitResult.content.length));
     });
   }
 }
