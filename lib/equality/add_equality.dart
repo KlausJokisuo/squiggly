@@ -26,25 +26,55 @@ class AddEquality extends ResolvedCorrectionProducer {
     final classDecl = node.thisOrAncestorOfType<ClassDeclaration>();
     if (classDecl == null) return;
 
-    final hasEqualityOverride = getEqualityMethod(classDecl) != null;
-    final hasHashCodeOverride = getHashCodeMethod(classDecl) != null;
+    final equalityMethod = getEqualityMethod(classDecl);
+    final hashCodeMethod = getHashCodeMethod(classDecl);
+
+    final hasEqualityOverride = equalityMethod != null;
+    final hasHashCodeOverride = hashCodeMethod != null;
 
     if (hasEqualityOverride && hasHashCodeOverride) return;
 
     final className = getClassName(classDecl);
-    final classFieldNames = getClassFields(
-      classDecl,
-    ).map((field) => field.name);
+    final classFields = getClassFields(classDecl);
 
-    await builder.addDartFileEdit(file, (builder) {
-      final insertOffset = classDecl.rightBracket.offset;
-      builder.addInsertion(insertOffset, (builder) {
-        builder.write(
-          buildEqualityAndHashCodeSnippet(className, classFieldNames),
+    await builder.addDartFileEdit(file, (fileBuilder) {
+      final snippet = buildEqualityAndHashCodeSnippet(
+        className,
+        classFields,
+        builder: fileBuilder,
+      );
+
+      // If both methods exist, replace them
+      if (equalityMethod != null && hashCodeMethod != null) {
+        final startOffset = equalityMethod.offset;
+        final endOffset = hashCodeMethod.offset + hashCodeMethod.length;
+        final length = endOffset - startOffset;
+
+        fileBuilder.addSimpleReplacement(
+          SourceRange(startOffset, length),
+          snippet,
         );
-      });
+      } else if (equalityMethod != null) {
+        // Only equality exists, replace it with both methods
+        fileBuilder.addSimpleReplacement(
+          SourceRange(equalityMethod.offset, equalityMethod.length),
+          snippet,
+        );
+      } else if (hashCodeMethod != null) {
+        // Only hashCode exists, replace it with both methods
+        fileBuilder.addSimpleReplacement(
+          SourceRange(hashCodeMethod.offset, hashCodeMethod.length),
+          snippet,
+        );
+      } else {
+        // Neither exists, insert at end of class
+        final insertOffset = classDecl.rightBracket.offset;
+        fileBuilder.addInsertion(insertOffset, (builder) {
+          builder.write(snippet);
+        });
+      }
 
-      builder.format(SourceRange(0, unitResult.content.length));
+      fileBuilder.format(SourceRange(0, unitResult.content.length));
     });
   }
 }
