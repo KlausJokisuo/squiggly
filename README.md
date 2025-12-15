@@ -165,7 +165,7 @@ class Person {
       other is Person && name == other.name && age == other.age;
 
   @override
-  int get hashCode => Object.hashAll([name, age]); // ⚠️ equality_incomplete: All fields should be included in equality and hashCode: email
+  int get hashCode => Object.hash(name, age); // ⚠️ equality_incomplete: All fields should be included in equality and hashCode: email
 
   @override
     String toString() {
