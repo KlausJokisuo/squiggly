@@ -1,6 +1,7 @@
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer_plugin/utilities/change_builder/change_builder_dart.dart';
 
 /// Code generation helpers (kept in one place to avoid duplication)
@@ -304,16 +305,13 @@ getClassFields(ClassDeclaration node, {bool constructorOnly = false}) {
         (fieldDecl) => fieldDecl.fields.variables.map((v) {
           final name = v.declaredFragment?.name ?? v.name.lexeme;
           final declaredElement = v.declaredFragment?.element;
-          final type =
-              declaredElement?.type.getDisplayString(withNullability: false) ??
-              'dynamic';
+          final type = declaredElement?.type.getDisplayString() ?? 'dynamic';
           final isNullable =
-              declaredElement?.type.nullabilitySuffix.toString().contains(
-                'question',
-              ) ??
-              false;
+              declaredElement?.type.nullabilitySuffix ==
+              NullabilitySuffix.question;
           final isCollection =
               declaredElement?.type.isDartCoreList == true ||
+              declaredElement?.type.isDartCoreIterable == true ||
               declaredElement?.type.isDartCoreSet == true ||
               declaredElement?.type.isDartCoreMap == true;
           final isNamed = parameterMap[name] ?? false;

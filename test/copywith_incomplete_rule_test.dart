@@ -1,3 +1,5 @@
+// ignore_for_file: non_constant_identifier_names
+
 import 'package:analyzer_testing/analysis_rule/analysis_rule.dart';
 import 'package:squiggly/copywith_incomplete/copywith_incomplete.dart';
 import 'package:test_reflective_loader/test_reflective_loader.dart';
