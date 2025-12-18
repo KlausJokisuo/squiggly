@@ -47,7 +47,7 @@ Add `squiggly` as a dev dependency in your `pubspec.yaml`:
 
 ```yaml
 dev_dependencies:
-  squiggly: ^1.0.0
+  squiggly: ^1.0.4
 ```
 
 Then configure the plugin in your `analysis_options.yaml`:
@@ -55,6 +55,7 @@ Then configure the plugin in your `analysis_options.yaml`:
 ```yaml
 plugins:
   squiggly:
+    version: ^1.0.4
     diagnostics:
       equality_incomplete: true
       copywith_incomplete: true
