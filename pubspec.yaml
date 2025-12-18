@@ -1,6 +1,6 @@
 name: squiggly
 description: A Dart analyzer plugin that provides custom linting rules and code analysis for Dart projects.
-version: 1.0.3
+version: 1.0.4
 repository: https://github.com/KlausJokisuo/squiggly
 issue_tracker: https://github.com/KlausJokisuo/squiggly/issues
 

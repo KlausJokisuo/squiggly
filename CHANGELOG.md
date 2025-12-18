@@ -1,3 +1,6 @@
+## 1.0.4
+- Update Readme
+
 ## 1.0.3
 - Enhance equality, hashCode and copyWith generation for classes with collection fields
 
